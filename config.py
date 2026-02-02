@@ -1,28 +1,30 @@
 """
-DEX Configuration for Base Chain
-Uniswap V3 Router and common token addresses
+DEX Configuration for Polygon (Matic) Chain
+Uniswap V3 Router and common token addresses for Polymarket trading
 """
 
-# Base Mainnet (Chain ID: 8453)
-BASE_MAINNET = {
-    "chain_id": 8453,
-    "rpc_url": "https://mainnet.base.org",
+# Polygon Mainnet (Chain ID: 137)
+POLYGON_MAINNET = {
+    "chain_id": 137,
+    "rpc_url": "https://polygon-rpc.com",
 
-    # Uniswap V3 on Base
-    "router_v3": "0x2626664c2603336E57B271c5C0b26F421741e481",  # SwapRouter02
-    "quoter_v2": "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a",
-    "factory": "0x33128a8fC17869897dcE68Ed026d694621f6FDfD",
+    # Uniswap V3 on Polygon
+    "router_v3": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",  # SwapRouter02 on Polygon
+    "quoter_v2": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",  # QuoterV2 on Polygon
+    "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",  # Uniswap V3 Factory on Polygon
 
-    # Common tokens on Base
+    # Common tokens on Polygon
     "tokens": {
-        "WETH": "0x4200000000000000000000000000000000000006",  # Wrapped ETH
-        "USDC": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",  # Native USDC
-        "USDbC": "0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA", # Bridged USDC
-        "DAI": "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb",
-        "cbBTC": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",  # Coinbase Wrapped BTC
-        "USDT": "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+        "WETH": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",  # Wrapped ETH on Polygon
+        "USDC": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",  # USDC on Polygon (used by Polymarket)
+        "USDT": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",  # USDT on Polygon
+        "DAI": "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063",  # DAI on Polygon
+        "MATIC": "0x0000000000000000000000000000000000001010",  # Native MATIC (not ERC20, but included for reference)
     }
 }
+
+# Alias for backward compatibility
+BASE_MAINNET = POLYGON_MAINNET
 
 # Uniswap V3 SwapRouter02 ABI (minimal)
 SWAPROUTER_ABI = [

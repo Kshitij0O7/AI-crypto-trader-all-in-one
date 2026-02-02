@@ -22,34 +22,32 @@ else:
     print(".env file not found!")
     sys.exit(1)
 
-# Verify critical variables
-required_vars = ['RPC_URL', 'PRIVATE_KEY']
-missing = [var for var in required_vars if not os.getenv(var)]
-if missing:
-    print(f"Missing environment variables: {', '.join(missing)}")
-    sys.exit(1)
-
-# Check for at least one AI API key
+# Check for at least one AI API key (RPC_URL and PRIVATE_KEY not needed for simulation mode)
 anthropic_key = os.getenv('ANTHROPIC_API_KEY')
 openai_key = os.getenv('OPENAI_API_KEY')
 if not anthropic_key and not openai_key:
     print("Missing AI API key: At least one of ANTHROPIC_API_KEY or OPENAI_API_KEY must be set")
     sys.exit(1)
 
-print(f"All required variables present")
+print(f"✅ Configuration validated (Simulation Mode)")
 if openai_key:
-    print(f"   OpenAI API key found (primary)")
+    print(f"   ✅ OpenAI API key found (primary)")
 if anthropic_key:
-    print(f"   Anthropic API key found (disabled - no credits)")
+    print(f"   ✅ Anthropic API key found (disabled - no credits)")
+print(f"   ⚠️  Simulation Mode: RPC_URL and PRIVATE_KEY not required")
 print()
 
 # Import and run bot
 from trading_bot import AITradingBotV2
 
 if __name__ == "__main__":
-    print("🤖 AI Trading Bot V2 - Enhanced with Liquidity Intelligence")
+    print("🤖 AI Trading Bot V2 - SIMULATION MODE")
+    print("=" * 60)
+    print("⚠️  SIMULATION MODE: No actual transactions will be executed")
     print("=" * 60)
     print("✨ Features:")
+    print("   • Trade simulation (records buy/sell prices)")
+    print("   • PnL calculation every 5 minutes")
     print("   • AI-powered decisions (GPT-4o)")
     print("   • Liquidity flow tracking (smart money)")
     print("   • Real slippage awareness (execution costs)")
@@ -59,8 +57,7 @@ if __name__ == "__main__":
     try:
         bot = AITradingBotV2()
         print("\n🚀 Bot initialized successfully!")
-        print(f"💰 Starting balance: {bot._get_balance():.6f} ETH")
-        print("\n⏰ Running trading loop with enhanced AI...")
+        print("\n⏰ Running trading simulation with enhanced AI...")
         print("=" * 60)
         bot.run(interval=60)
     except KeyboardInterrupt:

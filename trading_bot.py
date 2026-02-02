@@ -11,14 +11,13 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
-from web3 import Web3
 import anthropic
 try:
     import openai
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
-from config import BASE_MAINNET, SWAPROUTER_ABI, ERC20_ABI, FEE_TIERS
+from config import BASE_MAINNET
 from liquidity_data import get_enhanced_market_data
 
 load_dotenv()
@@ -39,7 +38,7 @@ class AITradingBotV2:
         # Load configuration
         self.rpc_url = os.getenv('RPC_URL')
         self.private_key = os.getenv('PRIVATE_KEY')
-        self.chain_id = int(os.getenv('CHAIN_ID', 8453))
+        self.chain_id = int(os.getenv('CHAIN_ID', 137))  # Polygon (Matic) network
         self.anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
         
@@ -59,18 +58,22 @@ class AITradingBotV2:
 
         # Validate and initialize
         self._validate_config()
-        self.w3 = Web3(Web3.HTTPProvider(self.rpc_url))
-        if not self.w3.is_connected():
-            raise Exception("❌ Failed to connect to RPC")
+        # Note: Web3 connection not needed for simulation mode
+        # self.w3 = Web3(Web3.HTTPProvider(self.rpc_url))
+        # if not self.w3.is_connected():
+        #     raise Exception("❌ Failed to connect to RPC")
 
-        self.account = self.w3.eth.account.from_key(self.private_key)
-        self.wallet_address = self.account.address
-        self.dex_config = BASE_MAINNET
+        # For simulation, we don't need actual wallet/account
+        # self.account = self.w3.eth.account.from_key(self.private_key)
+        # self.wallet_address = self.account.address
+        self.wallet_address = os.getenv('WALLET_ADDRESS', '0x0000000000000000000000000000000000000000')
+        self.dex_config = BASE_MAINNET  # Now points to POLYGON_MAINNET
 
-        self.router = self.w3.eth.contract(
-            address=Web3.to_checksum_address(self.dex_config['router_v3']),
-            abi=SWAPROUTER_ABI
-        )
+        # Router not needed for simulation
+        # self.router = self.w3.eth.contract(
+        #     address=Web3.to_checksum_address(self.dex_config['router_v3']),
+        #     abi=SWAPROUTER_ABI
+        # )
 
         # Initialize AI clients
         # COMMENTED OUT: Not adding more Anthropic credits for now
@@ -93,10 +96,10 @@ class AITradingBotV2:
         self.is_trading_enabled = True
         self.signal_history = []  # Track AI decisions for learning
 
-        print(f"✅ AI Trading Bot V2 Initialized")
+        print(f"✅ AI Trading Bot V2 Initialized - SIMULATION MODE")
         print(f"📍 Wallet: {self.wallet_address}")
-        print(f"⛓️  Chain ID: {self.chain_id}")
-        print(f"💰 Balance: {self._get_balance():.6f} ETH")
+        print(f"⛓️  Chain ID: {self.chain_id} (Polygon/Matic)")
+        print(f"⚠️  SIMULATION MODE: No actual transactions will be executed")
         if self.use_openai:
             ai_provider = "OpenAI (GPT-4o)"
         else:
@@ -109,65 +112,35 @@ class AITradingBotV2:
         print(f"   - Min Confidence: {self.min_confidence}%")
 
     def _validate_config(self):
-        """Validate configuration"""
-        required = {
-            'RPC_URL': self.rpc_url,
-            'PRIVATE_KEY': self.private_key,
-        }
-        missing = [k for k, v in required.items() if not v or 'your_' in str(v)]
-        if missing:
-            raise Exception(f"❌ Missing config: {', '.join(missing)}")
+        """Validate configuration - relaxed for simulation mode"""
+        # RPC_URL and PRIVATE_KEY not required for simulation
+        # required = {
+        #     'RPC_URL': self.rpc_url,
+        #     'PRIVATE_KEY': self.private_key,
+        # }
+        # missing = [k for k, v in required.items() if not v or 'your_' in str(v)]
+        # if missing:
+        #     raise Exception(f"❌ Missing config: {', '.join(missing)}")
         
         # At least one AI API key must be present
         if not self.anthropic_api_key and not self.openai_api_key:
             raise Exception("❌ Missing config: At least one of ANTHROPIC_API_KEY or OPENAI_API_KEY must be set")
 
     def _get_balance(self) -> float:
-        """Get ETH balance"""
-        return float(self.w3.from_wei(
-            self.w3.eth.get_balance(self.wallet_address),
-            'ether'
-        ))
+        """Get simulated balance - not used in simulation mode"""
+        # In simulation mode, we don't track actual balances
+        return 0.0
 
     def _get_wallet_portfolio(self, market_data: Optional[Dict] = None) -> List[Dict]:
         """
-        Get minimal wallet portfolio - only essential data for AI
+        Get simulated wallet portfolio - simplified for simulation mode
         Returns: [{"s": "SYMBOL", "usd": value}, ...]
-        Filters out dust (< $0.01) to save tokens
+        In simulation mode, we assume we have USDC available for trading
         """
         portfolio = []
-        dust_threshold = 0.01  # Ignore balances < $0.01
         
-        # Add ETH balance
-        eth_balance = self._get_balance()
-        eth_price = self._get_token_price_usd('WETH', market_data)
-        eth_usd = eth_balance * eth_price
-        if eth_usd >= dust_threshold:
-            portfolio.append({'s': 'ETH', 'usd': round(eth_usd, 2)})
-        
-        # Check all known tokens from config
-        for token_symbol, token_address in self.dex_config['tokens'].items():
-            try:
-                token = self.w3.eth.contract(
-                    address=Web3.to_checksum_address(token_address),
-                    abi=ERC20_ABI
-                )
-                decimals = self._get_token_decimals(token_address)
-                balance_raw = token.functions.balanceOf(self.wallet_address).call()
-                balance = balance_raw / (10 ** decimals)
-                
-                # Only include tokens with meaningful balance
-                if balance > 0:
-                    token_price = self._get_token_price_usd(token_symbol, market_data)
-                    balance_usd = balance * token_price
-                    if balance_usd >= dust_threshold:
-                        portfolio.append({'s': token_symbol, 'usd': round(balance_usd, 2)})
-            except Exception:
-                # Skip tokens that fail
-                continue
-        
-        # Sort by USD value (descending)
-        portfolio.sort(key=lambda x: x['usd'], reverse=True)
+        # In simulation, assume we have USDC available (from portfolio_size)
+        portfolio.append({'s': 'USDC', 'usd': round(self.portfolio_size, 2)})
         
         return portfolio
 
@@ -184,8 +157,10 @@ class AITradingBotV2:
         if len(self.open_positions) >= self.max_open_positions:
             return False
 
-        if self._get_balance() < 0.001:
-            return False
+        # Check MATIC balance for gas (need at least 0.01 MATIC for transactions)
+        # Balance check not needed in simulation mode
+        # if self._get_balance() < 0.01:
+        #     return False
 
         return True
 
@@ -334,7 +309,7 @@ PORTFOLIO STATUS:
 - Open Positions: {len(self.open_positions)}/{self.max_open_positions}
 - Daily PnL: ${self.daily_pnl:.2f}
 - Available Capital: ${self.portfolio_size - sum(p.get('amount_usd', 0) for p in self.open_positions):.2f}
-- Wallet Balance: {self._get_balance():.6f} ETH
+- Wallet Balance: {self._get_balance():.6f} MATIC
 
 YOUR PERFORMANCE:
 - Actions generated: {len(recent_signals)}
@@ -558,118 +533,50 @@ OUTPUT FORMAT (JSON only, no markdown):
         except Exception as e:
             raise Exception(f"OpenAI API error: {e}")
 
-    def _get_gas_price(self) -> Optional[int]:
-        """Get current gas price with safety limit"""
-        gas_price = self.w3.eth.gas_price
-        gas_price_gwei = self.w3.from_wei(gas_price, 'gwei')
-
-        if gas_price_gwei > self.max_gas_price_gwei:
-            print(f"⚠️  Gas price too high: {gas_price_gwei} Gwei (max: {self.max_gas_price_gwei})")
-            return None
-
-        return gas_price
-
-    def _build_transaction_params(self, gas: int, gas_price: Optional[int] = None, value: int = 0) -> Dict:
-        """
-        Build common transaction parameters.
+    def _print_pnl_report(self, market_data: Dict):
+        """Print detailed PnL report for all positions"""
+        pnl_data = self._calculate_pnl(market_data)
         
-        Args:
-            gas: Gas limit for the transaction
-            gas_price: Gas price (if None, uses current gas price)
-            value: ETH value to send (default: 0)
+        print(f"\n{'='*60}")
+        print(f"📊 PnL Report - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"{'='*60}")
+        print(f"Total Open Positions: {pnl_data['position_count']}")
+        print(f"Total Unrealized PnL: ${pnl_data['total_pnl']:.4f}")
+        print(f"Daily PnL (Realized + Unrealized): ${self.daily_pnl + pnl_data['total_pnl']:.4f}")
         
-        Returns:
-            Dictionary with transaction parameters
-        """
-        if gas_price is None:
-            gas_price = self.w3.eth.gas_price
+        if pnl_data['positions']:
+            print(f"\n📈 Position Details:")
+            for i, pos in enumerate(pnl_data['positions'], 1):
+                pnl_indicator = "🟢" if pos['pnl_usd'] >= 0 else "🔴"
+                print(f"   {i}. {pos['market']} {pnl_indicator}")
+                print(f"      Entry: ${pos['entry_price']:.8f} | Current: ${pos['current_price']:.8f}")
+                print(f"      PnL: ${pos['pnl_usd']:.4f} ({pos['pnl_pct']:+.2f}%) | Size: ${pos['amount_usd']:.2f}")
         
-        return {
-            'from': self.wallet_address,
-            'gas': gas,
-            'gasPrice': gas_price,
-            'nonce': self.w3.eth.get_transaction_count(self.wallet_address),
-            'value': value
-        }
-
-    def _sign_and_send_transaction(self, transaction: Dict, show_progress: bool = True) -> Optional[object]:
-        """
-        Sign and send a transaction.
+        print(f"{'='*60}\n")
         
-        Args:
-            transaction: Built transaction dictionary
-            show_progress: Whether to print progress messages
-        
-        Returns:
-            Transaction hash (HexBytes object), or None if failed
-        """
+        # Log to Excel file
         try:
-            if show_progress:
-                print(f"   ✍️  Signing transaction...")
-            signed_tx = self.account.sign_transaction(transaction)
-            
-            if show_progress:
-                print(f"   📤 Sending transaction...")
-            raw_tx = getattr(signed_tx, 'rawTransaction', None) or getattr(signed_tx, 'raw_transaction', None)
-            if raw_tx is None:
-                raise Exception("Could not access raw transaction")
-            
-            tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
-            return tx_hash
+            from logs import log_pnl_report, log_open_positions
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_pnl_report(pnl_data, self.daily_pnl, timestamp)
+            log_open_positions(self.open_positions, market_data, pnl_data)
         except Exception as e:
-            if show_progress:
-                print(f"   ❌ Failed to sign/send transaction: {e}")
-            return None
-
-    def _wait_for_transaction_receipt(self, tx_hash: object, timeout: int = 120, show_progress: bool = True) -> Optional[Dict]:
-        """
-        Wait for transaction receipt with error handling.
+            print(f"⚠️  Could not log to Excel: {e}")
         
-        Args:
-            tx_hash: Transaction hash (HexBytes object)
-            timeout: Timeout in seconds (default: 120)
-            show_progress: Whether to print progress messages
-        
-        Returns:
-            Transaction receipt dictionary, or None if failed
-        """
-        basescan_url = "https://basescan.org"
-        tx_hash_hex = tx_hash.hex()
-        if not tx_hash_hex.startswith('0x'):
-            tx_hash_hex = '0x' + tx_hash_hex
-        
-        if show_progress:
-            print(f"   ⏳ Waiting for confirmation...")
-            print(f"   🔗 TX Hash: {tx_hash_hex}")
-            print(f"   🔍 View on Basescan: {basescan_url}/tx/{tx_hash_hex}")
-        
+        # Log to Excel file
         try:
-            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout, poll_latency=2)
-            return receipt
+            from logs import log_pnl_report, log_open_positions
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_pnl_report(pnl_data, self.daily_pnl, timestamp)
+            log_open_positions(self.open_positions, market_data, pnl_data)
         except Exception as e:
-            try:
-                tx_status = self.w3.eth.get_transaction(tx_hash)
-                if tx_status:
-                    if show_progress:
-                        print(f"   ⚠️  Transaction pending...")
-                    receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60, poll_latency=2)
-                    return receipt
-                else:
-                    if show_progress:
-                        print(f"   ❌ Transaction not found: {e}")
-                    return None
-            except Exception as e2:
-                if show_progress:
-                    print(f"   ❌ Transaction failed: {e2}")
-                return None
+            print(f"⚠️  Could not log to Excel: {e}")
 
     def _get_token_address(self, symbol: str, contract_address: Optional[str] = None) -> Optional[str]:
         """Get token address from symbol or use provided contract address"""
         if contract_address:
-            try:
-                return Web3.to_checksum_address(contract_address)
-            except:
-                pass
+            # In simulation, just return the address as-is (no checksum needed)
+            return contract_address
 
         symbol_upper = symbol.upper()
         if symbol_upper == 'ETH':
@@ -677,15 +584,12 @@ OUTPUT FORMAT (JSON only, no markdown):
         return self.dex_config['tokens'].get(symbol_upper)
 
     def _get_token_decimals(self, token_address: str) -> int:
-        """Get token decimals"""
-        try:
-            token = self.w3.eth.contract(
-                address=Web3.to_checksum_address(token_address),
-                abi=ERC20_ABI
-            )
-            return token.functions.decimals().call()
-        except:
-            return 18
+        """Get token decimals - default to 18 for simulation"""
+        # In simulation mode, we don't need actual decimals
+        # Most tokens use 18 decimals, USDC uses 6
+        if 'USDC' in str(token_address).upper():
+            return 6
+        return 18
 
     def _find_contract_address(self, market_symbol: str, trade_data: Dict, liquidity_events: List, slippage_data: List) -> Optional[str]:
         """Find contract address for a token symbol from various data sources"""
@@ -743,84 +647,58 @@ OUTPUT FORMAT (JSON only, no markdown):
 
         if token_symbol in ['USDC', 'DAI', 'USDT']:
             return 1.0
-        if token_symbol == 'WETH':
+        if token_symbol in ['WETH', 'ETH']:
             return 3000.0
+        if token_symbol == 'MATIC':
+            return 0.8  # Approximate MATIC price (update as needed)
         return 1.0
 
     def _find_input_token(self, target_token_address: str, market_data: Optional[Dict] = None) -> Optional[Dict]:
-        """Find which token to trade from by checking balances"""
-        priority_tokens = ['USDC', 'WETH', 'DAI', 'USDT']
+        """Find which token to trade from - simplified for simulation"""
+        # In simulation mode, always use USDC as input token
+        token_symbol = 'USDC'
+        token_address = self.dex_config['tokens'].get(token_symbol)
+        
+        if not token_address:
+            return None
+        
+        # Simulate having enough balance
+        return {
+            'symbol': token_symbol,
+            'address': token_address,
+            'decimals': 6,  # USDC has 6 decimals
+            'balance': int(self.portfolio_size * 1e6),  # Simulated balance
+            'balance_formatted': self.portfolio_size
+        }
 
-        for token_symbol in priority_tokens:
-            token_address = self.dex_config['tokens'].get(token_symbol)
-            if not token_address or token_address.lower() == target_token_address.lower():
-                continue
-
-            try:
-                token = self.w3.eth.contract(
-                    address=Web3.to_checksum_address(token_address),
-                    abi=ERC20_ABI
-                )
-                decimals = self._get_token_decimals(token_address)
-                balance = token.functions.balanceOf(self.wallet_address).call()
-                balance_formatted = balance / (10 ** decimals)
-
-                token_price_usd = self._get_token_price_usd(token_symbol, market_data)
-                position_size_token = self.max_position_size / token_price_usd
-
-                if balance_formatted >= position_size_token:
-                    return {
-                        'symbol': token_symbol,
-                        'address': token_address,
-                        'decimals': decimals,
-                        'balance': balance,
-                        'balance_formatted': balance_formatted
-                    }
-            except:
-                continue
-
-        return None
-
-    def _approve_token(self, token_address: str, amount: int) -> bool:
-        """Approve router to spend tokens"""
-        try:
-            token = self.w3.eth.contract(
-                address=Web3.to_checksum_address(token_address),
-                abi=ERC20_ABI
-            )
-
-            allowance = token.functions.allowance(
-                self.wallet_address,
-                self.router.address
-            ).call()
-
-            if allowance >= amount:
-                print(f"   ✓ Token already approved")
-                return True
-
-            print(f"   📝 Approving token spend...")
-            approve_tx = token.functions.approve(
-                self.router.address,
-                amount
-            ).build_transaction(self._build_transaction_params(gas=100000))
-
-            tx_hash = self._sign_and_send_transaction(approve_tx)
-            if tx_hash is None:
-                return False
-
-            receipt = self._wait_for_transaction_receipt(tx_hash, timeout=120, show_progress=False)
-            if receipt is None:
-                print(f"   ⚠️  Approval pending")
-                return False
-
-            if receipt['status'] == 1:
-                print(f"   ✓ Approval confirmed")
-                return True
-            return False
-
-        except Exception as e:
-            print(f"   ❌ Approval failed: {e}")
-            return False
+    def _calculate_pnl(self, market_data: Dict) -> Dict:
+        """Calculate PnL for all open positions"""
+        total_pnl = 0.0
+        position_pnls = []
+        
+        for position in self.open_positions:
+            token_symbol = position['token_out']
+            current_price = self._get_token_price_usd(token_symbol, market_data)
+            
+            if current_price and current_price > 0:
+                pnl_pct = ((current_price - position['entry_price']) / position['entry_price']) * 100
+                pnl_usd = (current_price - position['entry_price']) / position['entry_price'] * position['amount_usd']
+                total_pnl += pnl_usd
+                
+                position_pnls.append({
+                    'market': token_symbol,
+                    'entry_price': position['entry_price'],
+                    'current_price': current_price,
+                    'pnl_usd': pnl_usd,
+                    'pnl_pct': pnl_pct,
+                    'amount_usd': position['amount_usd']
+                })
+        
+        return {
+            'total_pnl': total_pnl,
+            'position_count': len(position_pnls),
+            'positions': position_pnls
+        }
 
     def _execute_close(self, signal: Dict, market_data: Dict) -> Optional[str]:
         """Execute closing a position based on AI signal"""
@@ -874,6 +752,14 @@ OUTPUT FORMAT (JSON only, no markdown):
             
             print(f"   ✅ Position closed")
             print(f"   💰 PnL: ${pnl_usd:.4f} ({pnl_pct:+.2f}%)")
+            
+            # Log closed position to Excel
+            try:
+                from logs import log_closed_positions
+                log_closed_positions([position])
+            except Exception as e:
+                print(f"⚠️  Could not log closed position to Excel: {e}")
+            
             return "closed"
         
         return None
@@ -981,7 +867,7 @@ OUTPUT FORMAT (JSON only, no markdown):
         return self.execute_action(signal, market_data)
 
     def _execute_trade(self, action_data: Dict, market_data: Dict, trade_type: str) -> Optional[str]:
-        """Execute a BUY or SELL trade (internal method)"""
+        """Simulate a BUY or SELL trade - records position without executing blockchain transaction"""
         # Show raw slippage data if available
         if 'slippage_bps' in action_data:
             print(f"   Slippage: {action_data['slippage_bps']} bps")
@@ -998,206 +884,67 @@ OUTPUT FORMAT (JSON only, no markdown):
         if not self._check_safety_limits():
             return None
 
-        gas_price = self._get_gas_price()
-        if gas_price is None:
-            return None
-
         try:
-            # Get token addresses
-            token_out_address = self._get_token_address(
-                action_data['market'],
-                action_data.get('contract_address')
-            )
-
-            if not token_out_address:
-                print(f"   ❌ Unknown token: {action_data['market']}")
+            # Get current price as entry price
+            current_price = self._get_token_price_usd(action_data['market'], market_data)
+            if not current_price or current_price <= 0:
+                print(f"   ❌ Could not get current price for {action_data['market']}")
                 return None
 
-            # Find input token
-            input_token = self._find_input_token(token_out_address, market_data)
-            if not input_token:
-                print(f"   ❌ No sufficient balance in any supported token")
-                return None
+            # Use current market price as entry price (or use provided entry_price if it's more realistic)
+            entry_price = action_data.get('entry_price', current_price)
+            
+            print(f"   💱 Simulating {trade_type} trade")
+            print(f"   📊 Entry Price: ${entry_price:.8f}")
+            print(f"   📊 Current Market Price: ${current_price:.8f}")
 
-            token_in_address = input_token['address']
-            token_in_decimals = input_token['decimals']
-            token_in_symbol = input_token['symbol']
-
-            print(f"   💰 {token_in_symbol} Balance: {input_token['balance_formatted']:.6f}")
-
-            # Get target token decimals
-            token_out_decimals = self._get_token_decimals(token_out_address)
-
-            # Calculate amounts
-            token_in_price_usd = self._get_token_price_usd(token_in_symbol, market_data)
-            position_size_token = position_size / token_in_price_usd
-            amount_in = int(position_size_token * (10 ** token_in_decimals))
-
-            if input_token['balance'] < amount_in:
-                print(f"   ❌ Insufficient {token_in_symbol} balance: {input_token['balance_formatted']:.6f} < {position_size_token:.6f}")
-                return None
-
-            # Calculate minimum output
-            target_token_amount = position_size / action_data['entry_price']
-            amount_out_min = int(
-                target_token_amount *
-                (10 ** token_out_decimals) *
-                (1 - self.slippage_tolerance / 100)
-            )
-
-            print(f"   💱 Swapping {amount_in / (10**token_in_decimals):.6f} {token_in_symbol} for {action_data['market']}")
-            print(f"   📊 Amount in: {amount_in / (10**token_in_decimals):.6f} {token_in_symbol}")
-            print(f"   📊 Min amount out: {amount_out_min / (10**token_out_decimals):.10f} {action_data['market']}")
-
-            # Approve token
-            if not self._approve_token(token_in_address, amount_in):
-                return None
-
-            # Build swap transaction
-            print(f"   🔨 Building swap transaction...")
-            swap_params = {
-                'tokenIn': Web3.to_checksum_address(token_in_address),
-                'tokenOut': Web3.to_checksum_address(token_out_address),
-                'fee': FEE_TIERS['MEDIUM'],
-                'recipient': self.wallet_address,
-                'amountIn': amount_in,
-                'amountOutMinimum': amount_out_min,
-                'sqrtPriceLimitX96': 0
+            # Record position (simulated)
+            position_id = f"sim_{int(time.time())}_{action_data['market']}"
+            position = {
+                'id': position_id,
+                'market': action_data['market'],
+                'action': action_data['action'],
+                'entry_price': entry_price,
+                'target_price': action_data['target_price'],
+                'stop_loss': action_data['stop_loss'],
+                'confidence': action_data['confidence'],
+                'reasoning': action_data.get('reasoning', ''),
+                'timestamp': datetime.now().isoformat(),
+                'amount_usd': position_size,
+                'token_out': action_data['market'],
+                'contract_address': action_data.get('contract_address', ''),
+                'slippage_bps': action_data.get('slippage_bps', 0),
+                'simulated': True  # Mark as simulated
             }
 
-            swap_tx = self.router.functions.exactInputSingle(
-                swap_params
-            ).build_transaction(self._build_transaction_params(gas=self.gas_limit, gas_price=gas_price, value=0))
-
-            # Sign and send
-            tx_hash = self._sign_and_send_transaction(swap_tx)
-            if tx_hash is None:
-                return None
-
-            receipt = self._wait_for_transaction_receipt(tx_hash)
-            if receipt is None:
-                return None
-
-            if receipt['status'] == 1:
-                print(f"   ✅ Swap confirmed in block {receipt['blockNumber']}")
-                print(f"   ⛽ Gas used: {receipt['gasUsed']}")
-
-                # Get tx hash as hex string
-                tx_hash_hex = tx_hash.hex()
-                if not tx_hash_hex.startswith('0x'):
-                    tx_hash_hex = '0x' + tx_hash_hex
-
-                # Record position
-                position = {
-                    'market': action_data['market'],
-                    'action': action_data['action'],
-                    'entry_price': action_data['entry_price'],
-                    'target_price': action_data['target_price'],
-                    'stop_loss': action_data['stop_loss'],
-                    'confidence': action_data['confidence'],
-                    'reasoning': action_data.get('reasoning', ''),
-                    'tx_hash': tx_hash_hex,
-                    'block_number': receipt['blockNumber'],
-                    'gas_used': receipt['gasUsed'],
-                    'timestamp': datetime.now().isoformat(),
-                    'amount_usd': position_size,
-                    'token_in': token_in_symbol,
-                    'token_out': action_data['market'],
-                    'contract_address': token_out_address,  # Store for closing position
-                    'slippage_bps': action_data.get('slippage_bps', 0)
-                }
-
-                self.open_positions.append(position)
-                return tx_hash_hex
-            else:
-                print(f"   ❌ Transaction failed (status: {receipt['status']})")
-                return None
+            self.open_positions.append(position)
+            print(f"   ✅ Position recorded (SIMULATED)")
+            print(f"   📝 Position ID: {position_id}")
+            return position_id
 
         except Exception as e:
-            print(f"   ❌ Error executing swap: {e}")
+            print(f"   ❌ Error simulating trade: {e}")
             import traceback
             traceback.print_exc()
             return None
 
     def _close_position(self, position: Dict, market_data: Dict, current_price: float) -> bool:
-        """Close a position by swapping the token back to USDC"""
+        """Simulate closing a position - records exit price without executing blockchain transaction"""
         try:
             token_symbol = position['token_out']
-            token_address = self._get_token_address(token_symbol, position.get('contract_address'))
             
-            if not token_address:
-                print(f"   ❌ Could not find address for {token_symbol}")
-                return False
+            print(f"   💱 Simulating close of {token_symbol} position")
+            print(f"   📊 Entry Price: ${position['entry_price']:.8f}")
+            print(f"   📊 Exit Price: ${current_price:.8f}")
             
-            # Get token balance
-            token = self.w3.eth.contract(
-                address=Web3.to_checksum_address(token_address),
-                abi=ERC20_ABI
-            )
-            decimals = self._get_token_decimals(token_address)
-            balance = token.functions.balanceOf(self.wallet_address).call()
+            # Calculate PnL
+            pnl_pct = ((current_price - position['entry_price']) / position['entry_price']) * 100
+            pnl_usd = (current_price - position['entry_price']) / position['entry_price'] * position['amount_usd']
             
-            if balance == 0:
-                print(f"   ⚠️  No balance to close")
-                return False
+            print(f"   ✅ Position closed (SIMULATED)")
+            print(f"   💰 PnL: ${pnl_usd:.4f} ({pnl_pct:+.2f}%)")
             
-            # Find USDC address
-            usdc_address = self.dex_config['tokens'].get('USDC')
-            if not usdc_address:
-                print(f"   ❌ USDC not configured")
-                return False
-            
-            # Calculate minimum output (with slippage tolerance)
-            balance_formatted = balance / (10 ** decimals)
-            expected_usdc = balance_formatted * current_price
-            amount_out_min = int(
-                expected_usdc *
-                (10 ** 6) *  # USDC has 6 decimals
-                (1 - self.slippage_tolerance / 100)
-            )
-            
-            print(f"   💱 Swapping {balance_formatted:.8f} {token_symbol} for USDC")
-            print(f"   📊 Min USDC out: {amount_out_min / 1e6:.4f}")
-            
-            # Approve token
-            if not self._approve_token(token_address, balance):
-                return False
-            
-            # Get gas price
-            gas_price = self._get_gas_price()
-            if gas_price is None:
-                return False
-            
-            # Build swap transaction
-            swap_params = {
-                'tokenIn': Web3.to_checksum_address(token_address),
-                'tokenOut': Web3.to_checksum_address(usdc_address),
-                'fee': FEE_TIERS['MEDIUM'],
-                'recipient': self.wallet_address,
-                'amountIn': balance,
-                'amountOutMinimum': amount_out_min,
-                'sqrtPriceLimitX96': 0
-            }
-            
-            swap_tx = self.router.functions.exactInputSingle(
-                swap_params
-            ).build_transaction(self._build_transaction_params(gas=self.gas_limit, gas_price=gas_price, value=0))
-            
-            # Sign and send
-            tx_hash = self._sign_and_send_transaction(swap_tx)
-            if tx_hash is None:
-                return False
-            
-            receipt = self._wait_for_transaction_receipt(tx_hash)
-            if receipt is None:
-                return False
-            
-            if receipt['status'] == 1:
-                print(f"   ✅ Close confirmed in block {receipt['blockNumber']}")
-                return True
-            else:
-                print(f"   ❌ Close transaction failed (status: {receipt['status']})")
-                return False
+            return True
                 
         except Exception as e:
             print(f"   ❌ Error closing position: {e}")
@@ -1206,76 +953,117 @@ OUTPUT FORMAT (JSON only, no markdown):
             return False
 
     def run(self, interval: int = 60):
-        """Main trading loop with enhanced AI"""
-        print(f"\n🚀 Starting AI Trading Bot V2 (interval: {interval}s)")
+        """Main trading loop with enhanced AI - SIMULATION MODE"""
+        print(f"\n🚀 Starting AI Trading Bot V2 - SIMULATION MODE (interval: {interval}s)")
+        print("=" * 60)
+        print("⚠️  SIMULATION MODE: No actual transactions will be executed")
         print("=" * 60)
 
         cycle = 0
-        while True:
-            try:
-                cycle += 1
-                print(f"\n{'='*60}")
-                print(f"📊 Cycle {cycle} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                print(f"{'='*60}")
+        last_pnl_time = time.time()
+        pnl_interval = 300  # 5 minutes in seconds
 
-                # Fetch ENHANCED market data
-                market_data = get_enhanced_market_data()
+        try:
+            while True:
+                try:
+                    cycle += 1
+                    print(f"\n{'='*60}")
+                    print(f"📊 Cycle {cycle} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                    print(f"{'='*60}")
 
-                if not market_data:
-                    print("⚠️  No market data, skipping cycle")
+                    # Fetch ENHANCED market data
+                    market_data = get_enhanced_market_data()
+
+                    if not market_data:
+                        print("⚠️  No market data, skipping cycle")
+                        time.sleep(interval)
+                        continue
+
+                    # Generate AI actions - AI decides ALL actions (open, close, hold, etc.)
+                    print("\n🤖 Asking AI to analyze markets and decide actions...")
+                    actions = self.generate_ai_actions(market_data)
+
+                    if actions:
+                        print(f"\n✨ AI generated {len(actions)} action(s)")
+                        for action in actions:
+                            # Only check safety limits for opening new positions
+                            if action.get('action', '').upper() in ['BUY', 'SELL', 'MARKET_MAKE']:
+                                if not self._check_safety_limits():
+                                    print(f"   ⚠️  Safety limits reached, skipping {action.get('action')} action")
+                                    continue
+                            self.execute_action(action, market_data)
+                            time.sleep(2)
+                    else:
+                        print("⏸️  AI decided to wait (no actions needed)")
+
+                    # Status
+                    print(f"\n📈 Portfolio Status:")
+                    print(f"   Open Positions: {len(self.open_positions)}/{self.max_open_positions}")
+                    print(f"   Daily PnL (Realized): ${self.daily_pnl:.4f}")
+                    print(f"   AI Success Rate: {len([s for s in self.signal_history[-20:] if s.get('outcome')=='success'])/max(len(self.signal_history[-20:]), 1)*100:.1f}%")
+
+                    # Calculate and print PnL every 5 minutes
+                    current_time = time.time()
+                    if current_time - last_pnl_time >= pnl_interval:
+                        self._print_pnl_report(market_data)
+                        last_pnl_time = current_time
+
+                    # Wait
                     time.sleep(interval)
-                    continue
 
-                # # Pretty print market summary
-                # print_enhanced_market_summary(market_data)
+                except KeyboardInterrupt:
+                    raise  # Re-raise to handle in outer try-except
+                except Exception as e:
+                    print(f"❌ Error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    time.sleep(10)
 
-                # Generate AI actions - AI decides ALL actions (open, close, hold, etc.)
-                print("\n🤖 Asking AI to analyze markets and decide actions...")
-                actions = self.generate_ai_actions(market_data)
-
-                if actions:
-                    print(f"\n✨ AI generated {len(actions)} action(s)")
-                    for action in actions:
-                        # Only check safety limits for opening new positions
-                        if action.get('action', '').upper() in ['BUY', 'SELL', 'MARKET_MAKE']:
-                            if not self._check_safety_limits():
-                                print(f"   ⚠️  Safety limits reached, skipping {action.get('action')} action")
-                                continue
-                        self.execute_action(action, market_data)
-                        time.sleep(2)
-                else:
-                    print("⏸️  AI decided to wait (no actions needed)")
-
-                # Status
-                print(f"\n📈 Portfolio Status:")
-                print(f"   Open Positions: {len(self.open_positions)}/{self.max_open_positions}")
-                print(f"   Daily PnL: ${self.daily_pnl:.4f}")
-                print(f"   AI Success Rate: {len([s for s in self.signal_history[-20:] if s.get('outcome')=='success'])/max(len(self.signal_history[-20:]), 1)*100:.1f}%")
-
-                # Wait
-                time.sleep(interval)
-
-            except KeyboardInterrupt:
-                print("\n🛑 Shutting down...")
-                break
+        except KeyboardInterrupt:
+            print("\n🛑 Shutting down...")
+            # Calculate final PnL on exit
+            print("\n📊 Calculating final PnL...")
+            market_data = get_enhanced_market_data()
+            if market_data:
+                self._print_pnl_report(market_data)
+            
+            # Print summary of closed positions
+            if self.closed_positions:
+                print(f"\n📋 Closed Positions Summary:")
+                print(f"   Total Closed: {len(self.closed_positions)}")
+                total_realized_pnl = sum(p.get('pnl_usd', 0) for p in self.closed_positions)
+                print(f"   Total Realized PnL: ${total_realized_pnl:.4f}")
+            
+            # Log final summary to Excel
+            try:
+                from logs import log_trading_summary, log_closed_positions, log_signal_history
+                pnl_data = self._calculate_pnl(market_data) if market_data else None
+                log_trading_summary(self.open_positions, self.closed_positions, self.daily_pnl, pnl_data)
+                log_closed_positions(self.closed_positions)
+                if self.signal_history:
+                    log_signal_history(self.signal_history)
+                print(f"\n📝 Trading data logged to Excel files in 'logs/' directory")
             except Exception as e:
-                print(f"❌ Error: {e}")
-                import traceback
-                traceback.print_exc()
-                time.sleep(10)
+                print(f"⚠️  Could not log final summary to Excel: {e}")
+            
+            print("\n✅ Simulation ended")
 
 
 if __name__ == "__main__":
-    print("🤖 AI Trading Bot V2 - Enhanced with Liquidity Intelligence")
+    print("🤖 AI Trading Bot V2 - SIMULATION MODE")
     print("=" * 60)
-    print("⚠️  This version uses:")
+    print("⚠️  SIMULATION MODE: No actual transactions will be executed")
+    print("=" * 60)
+    print("✨ Features:")
+    print("   • Trade simulation (records buy/sell prices)")
+    print("   • PnL calculation every 5 minutes")
     print("   • Liquidity flow analysis (smart money tracking)")
     print("   • Real slippage data (execution quality)")
     print("   • Enhanced AI prompting (better context)")
     print("   • Performance tracking (AI learns from results)")
     print("=" * 60)
 
-    response = input("\n🟢 Type 'START' to begin: ")
+    response = input("\n🟢 Type 'START' to begin simulation: ")
     if response.strip().upper() == 'START':
         bot = AITradingBotV2()
         bot.run(interval=60)

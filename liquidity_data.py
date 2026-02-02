@@ -12,14 +12,14 @@ BITQUERY_API_KEY = os.getenv('BITQUERY_API_KEY')
 
 def fetch_liquidity_events(limit: int = 100) -> Dict:
     """
-    Fetch liquidity add/remove events from Base network
+    Fetch liquidity add/remove events from Polygon network
     This shows smart money movements - much more valuable than just trades!
     """
     url = "https://streaming.bitquery.io/graphql"
 
     query = """
-    query BaseLiquidityEvents {
-        EVM(network: base) {
+    query PolygonLiquidityEvents {
+        EVM(network: matic) {
             DEXPoolEvents(
                 limit: {count: 200}
                 orderBy: {descending: Block_Time}
@@ -111,8 +111,8 @@ def fetch_pool_slippage(pools: List[str], limit: int = 100) -> Dict:
 
     # For now, get slippage data for top pools by recent activity
     query = """
-    query BasePoolSlippage {
-        EVM(network: base) {
+    query PolygonPoolSlippage {
+        EVM(network: matic) {
             DEXPoolSlippages(
                 limit: {count: 200}
                 orderBy: {descending: Block_Time}
@@ -199,11 +199,11 @@ def get_enhanced_market_data() -> Dict:
     Get raw market data from all 3 sources - no processing, let AI decide
     Returns all 3 raw API responses for AI to interpret
     """
-    from market_data import fetch_base_dex_data
+    from market_data import fetch_polymarket_data
 
-    # Get regular trade data
+    # Get regular trade data (Polymarket on Polygon)
     print("📡 Fetching trade data...")
-    trade_data = fetch_base_dex_data()
+    trade_data = fetch_polymarket_data(limit=200)
 
     # Get liquidity events
     print("💧 Fetching liquidity events...")

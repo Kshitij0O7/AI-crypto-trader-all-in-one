@@ -11,50 +11,47 @@ import json
 BITQUERY_API_KEY = os.getenv('BITQUERY_API_KEY')
 
 
-def fetch_base_dex_data(limit: int = 100, required_tokens: List[Dict] = None) -> Dict:
+def fetch_polymarket_data(limit: int = 100, required_tokens: List[Dict] = None) -> Dict:
     """
-    Fetch recent DEX trades from Base network via Bitquery REST API
+    Fetch recent DEX trades from Polymarket via Bitquery GraphQL API
     """
     url = "https://streaming.bitquery.io/graphql"
 
     query = """
-    query BaseDEXTrades {
-        EVM(network: base) {
+    query PolygonDEXTrades {
+        EVM(network: matic) {
             DEXTradeByTokens(
-                limit: {count: 200}
-                orderBy: {descending: Block_Time}
-                where: {
-                    TransactionStatus: {Success: true}
-                    Trade: {
-                        Side: {
-                            Currency: {
-                                SmartContract: {is: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"}
-                            }
-                        }
-                    }
+            limit: {count: 200}
+            orderBy: {descending: Block_Time}
+            where: {
+                TransactionStatus: {Success: true}, 
+                Trade: {
+                Side: {Currency: {SmartContract: {is: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"}}}
+                Dex: {ProtocolName: {is: "polymarket"}}
                 }
+            }
             ) {
-                Block {
-                    Time
+            Block {
+                Time
+            }
+            Trade {
+                Dex {
+                ProtocolName
                 }
-                Trade {
-                    Dex {
-                        ProtocolName
-                    }
-                    PriceInUSD
-                    Side {
-                        Type
-                        AmountInUSD
-                        Currency {
-                            Symbol
-                            SmartContract
-                        }
-                    }
-                    Currency {
-                        Symbol
-                        SmartContract
-                    }
+                PriceInUSD
+                Side {
+                Type
+                AmountInUSD
+                Currency {
+                    Symbol
+                    SmartContract
                 }
+                }
+                Currency {
+                Symbol
+                SmartContract
+                }
+            }
             }
         }
     }
@@ -167,7 +164,7 @@ def get_market_data_for_trading(required_tokens: List[Dict] = None) -> Dict:
     Get formatted market data ready for Claude analysis
     required_tokens: List of dicts with 'symbol' and/or 'contract_address' to ensure inclusion
     """
-    data = fetch_base_dex_data(limit=200, required_tokens=required_tokens)
+    data = fetch_polymarket_data(limit=200, required_tokens=required_tokens)
 
     if not data:
         return None
