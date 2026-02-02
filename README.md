@@ -1,44 +1,62 @@
-# AI Trading Bot on Uniswap - Complete Portfolio Management
+# AI Trading Bot for Polymarket - Simulation Mode
 
-An autonomous cryptocurrency trading bot that uses AI (GPT-4o or Claude) to make trading decisions on Uniswap (Base chain in this case) market & liquidity data.
+An autonomous cryptocurrency trading bot that uses AI (GPT-4o or Claude) to make trading decisions on Polymarket prediction markets. The bot operates in **simulation mode** - it tracks positions and calculates PnL without executing actual blockchain transactions.
 
 ## Features
 
-- AI-powered decision making using GPT-4o or Claude Sonnet
-- Liquidity flow tracking for smart money detection
-- Real-time slippage awareness and execution cost analysis
-- Automated position management (buy, hold, sell)
-- Portfolio tracking with PnL calculations
+- **Simulation Mode**: No actual transactions - records buy/sell prices and calculates PnL
+- **AI-powered decision making** using GPT-4o or Claude Sonnet
+- **Polymarket Integration**: Trades on Polymarket prediction markets via Polygon network
+- **Odds Interpretation**: Understands that prices represent prediction odds (0-1 probability)
+- **Asset ID Tracking**: Tracks specific prediction tokens (e.g., YES token IDs for questions)
+- **Liquidity Analysis**: Monitors OrdersMatched events to track liquidity provision activity
+- **Automated position management** (buy, hold, sell)
+- **Portfolio tracking** with PnL calculations every 5 minutes
+- **Excel Logging**: Comprehensive logging to Excel files for analysis
 
 ## Architecture
 
 The bot operates in continuous cycles, performing the following steps:
 
-1. Fetches trade data from the market
-2. Analyzes liquidity events to detect smart money flows
-3. Calculates slippage data for execution cost awareness
-4. Sends market data to AI for analysis and decision making
-5. Executes AI-recommended trades (buy/sell/hold)
-6. Manages open positions and risk limits
+1. Fetches trade data from Polymarket (via Bitquery)
+2. Analyzes OrdersMatched events to detect liquidity provision activity
+3. Sends market data to AI for analysis and decision making
+4. Records AI-recommended trades (simulated - no actual transactions)
+5. Manages open positions and risk limits
+6. Calculates and logs PnL every 5 minutes
 7. Tracks portfolio performance and success metrics
+8. Exports all data to Excel files for analysis
+
+## Key Concepts
+
+### Polymarket Trading
+- **Prices = Odds**: The `PriceInUSD` field represents the probability (0-1) that a prediction will be true
+  - Example: `price=0.75` means 75% probability the prediction is true
+  - Example: `price=0.25` means 25% probability (75% probability it's false)
+- **Asset IDs**: Each prediction token has a unique asset ID (e.g., YES token ID for a specific question)
+- **OrdersMatched Events**: Show liquidity provision activity on Polymarket's order book
+
+### Simulation Mode
+- **No Blockchain Transactions**: All trades are simulated and recorded
+- **Position Tracking**: Records entry/exit prices and calculates PnL
+- **PnL Reports**: Generated every 5 minutes and on program exit
+- **Excel Logs**: All trading activity is logged to Excel files in the `logs/` directory
 
 ## Safety Features
 
-- Portfolio value limit: $10.00
-- Maximum position size: $1.00
-- Daily loss limit: $2.00
-- Minimum confidence threshold: 10%
-- Maximum open positions: 3
+- Portfolio value limit: $10.00 (configurable)
+- Maximum position size: $1.00 (configurable)
+- Daily loss limit: $2.00 (configurable)
+- Minimum confidence threshold: 30% (configurable, lowered for testing)
+- Maximum open positions: 2 (configurable)
 - Automatic position closure on stop-loss or target
 
 ## Requirements
 
 - Python 3.8+
-- Web3 wallet with private key
-- Base mainnet RPC access (Infura or similar)
 - BitQuery API key for market and liquidity data (create at https://account.bitquery.io/user/api_v2/access_tokens)
 - OpenAI API key or Anthropic API key
-- Initial USDC balance on Base chain
+- **No wallet or RPC required** (simulation mode)
 
 ## Installation
 
@@ -54,28 +72,31 @@ pip install -r requirements.txt
 ```
 
 3. Get API Keys
-- BitQuery: Create an API key at https://account.bitquery.io/user/api_v2/access_tokens
-- OpenAI: Get your API key from https://platform.openai.com/api-keys
-- Anthropic (optional): Get from https://console.anthropic.com/
-- Infura: Get Base RPC endpoint from https://infura.io/
+- **BitQuery**: Create an API key at https://account.bitquery.io/user/api_v2/access_tokens
+- **OpenAI**: Get your API key from https://platform.openai.com/api-keys
+- **Anthropic** (optional): Get from https://console.anthropic.com/
 
 4. Configure environment variables
 Copy `.env_example` to `.env` and fill in your values:
 ```
-RPC_URL=https://base-mainnet.infura.io/v3/YOUR_INFURA_API_KEY
-CHAIN_ID=8453
-PRIVATE_KEY=your_wallet_private_key
-ANTHROPIC_API_KEY=sk-ant-... (optional)
-OPENAI_API_KEY=sk-proj-...
-BITQUERY_API_KEY=ory_at_...
+# AI Provider API Keys (at least one required)
+OPENAI_API_KEY=sk-proj-your_openai_key_here
+ANTHROPIC_API_KEY=sk-ant-your_anthropic_key_here
+
+# Market Data API
+BITQUERY_API_KEY=ory_at_your_bitquery_key_here
+
+# Portfolio and Risk Management
 PORTFOLIO_SIZE_USD=10
-MAX_POSITION_SIZE_USD=1
-SLIPPAGE_TOLERANCE=1.0
-GAS_LIMIT=300000
-MAX_GAS_PRICE_GWEI=50
-DAILY_LOSS_LIMIT_USD=2
-MAX_OPEN_POSITIONS=3
-MIN_CONFIDENCE_THRESHOLD=10
+MAX_POSITION_SIZE_USD=1.5
+DAILY_LOSS_LIMIT_USD=3
+MAX_OPEN_POSITIONS=2
+MIN_CONFIDENCE_THRESHOLD=30
+
+# Optional - Not required for simulation mode
+# RPC_URL=https://polygon-rpc.com
+# CHAIN_ID=137
+# PRIVATE_KEY=your_wallet_private_key_here
 ```
 
 ## Usage
@@ -87,93 +108,160 @@ python3 main.py
 
 The bot will:
 - Load environment variables and validate configuration
-- Initialize wallet connection on Base mainnet (Chain ID: 8453)
-- Display current balance and safety limits
+- Initialize in simulation mode (no wallet connection needed)
+- Display safety limits and configuration
 - Start the trading loop with 60-second intervals
+- Calculate and display PnL every 5 minutes
+- Log all activity to Excel files in the `logs/` directory
 
 ## Configuration
 
 Key settings can be configured via environment variables:
 
-- **RPC_URL**: Base mainnet RPC endpoint (Infura recommended)
-- **CHAIN_ID**: Blockchain chain ID (8453 for Base)
-- **BITQUERY_API_KEY**: Required for fetching trade and liquidity data
+- **BITQUERY_API_KEY**: Required for fetching Polymarket trade and liquidity data
 - **AI provider**: Supports OpenAI (GPT-4o) or Anthropic (Claude)
-- **PORTFOLIO_SIZE_USD**: Maximum portfolio value in USD
-- **MAX_POSITION_SIZE_USD**: Maximum size per position in USD
-- **DAILY_LOSS_LIMIT_USD**: Maximum daily loss before stopping
-- **MAX_OPEN_POSITIONS**: Maximum number of concurrent positions
-- **MIN_CONFIDENCE_THRESHOLD**: Minimum AI confidence % to execute trades
-- **SLIPPAGE_TOLERANCE**: Acceptable slippage percentage
-- **GAS_LIMIT**: Maximum gas units per transaction
-- **MAX_GAS_PRICE_GWEI**: Maximum gas price in Gwei
+- **PORTFOLIO_SIZE_USD**: Maximum portfolio value in USD (default: 10)
+- **MAX_POSITION_SIZE_USD**: Maximum size per position in USD (default: 1.5)
+- **DAILY_LOSS_LIMIT_USD**: Maximum daily loss before stopping (default: 3)
+- **MAX_OPEN_POSITIONS**: Maximum number of concurrent positions (default: 2)
+- **MIN_CONFIDENCE_THRESHOLD**: Minimum AI confidence % to execute trades (default: 30)
+
+**Note**: RPC_URL, CHAIN_ID, and PRIVATE_KEY are not required for simulation mode.
 
 ## Trading Logic
 
 The AI analyzes multiple data sources:
-- Recent trade volumes and price movements
-- Liquidity addition/removal events
-- Slippage estimates and execution costs
-- Market maker activity
-- Buy vs sell pressure
+- **Trade Data**: Recent Polymarket trades with volumes and prices (odds)
+- **Asset IDs**: Unique identifiers for prediction tokens
+- **OrdersMatched Events**: Liquidity provision activity on the order book
+  - `takerAssetId`: Asset ID being traded
+  - `takerAmountFilled`: Amount trader wants to buy
+  - `makerAmountFilled`: Amount liquidity provider can provide
+- **Buy vs sell pressure**: Volume analysis
+- **Market confidence**: Interprets prices as odds/probabilities
 
 Based on this analysis, the AI generates trading actions with:
 - Confidence level (0-100%)
 - Reasoning for the decision
-- Entry price and position size
-- Target price for profit taking
-- Stop loss price for risk management
+- Entry price (odds) and position size
+- Target price (odds) for profit taking
+- Stop loss price (odds) for risk management
+- Asset ID for tracking specific predictions
 
 ## Performance Tracking
 
 The bot tracks:
 - Number of open positions
-- Daily PnL (Profit and Loss)
+- Daily PnL (Profit and Loss) - realized and unrealized
 - AI success rate
 - Individual trade outcomes
-- Gas costs per transaction
+- PnL calculated every 5 minutes
+- All data exported to Excel files
+
+## Excel Logging
+
+All trading activity is automatically logged to Excel files in the `logs/` directory:
+
+- **open_positions_YYYYMMDD.xlsx**: Open positions with current PnL
+- **closed_positions_YYYYMMDD.xlsx**: Closed positions with final PnL
+- **pnl_reports_YYYYMMDD.xlsx**: Periodic PnL snapshots (every 5 minutes)
+- **signal_history_YYYYMMDD.xlsx**: AI decision history
+- **trading_summary_YYYYMMDD.xlsx**: Complete summary with all metrics
+
+Each log file includes:
+- Timestamps
+- Market symbols
+- **Asset IDs** (for tracking specific predictions)
+- Entry/exit prices (odds)
+- PnL calculations
+- AI confidence and reasoning
 
 ## Example Output
 
 ```
-AI Trading Bot V2 - Enhanced with Liquidity Intelligence
+🤖 AI Trading Bot V2 - SIMULATION MODE
 ============================================================
-Features:
-   • AI-powered decisions (GPT-4o)
-   • Liquidity flow tracking (smart money)
-   • Real slippage awareness (execution costs)
-   • Enhanced risk management
+⚠️  SIMULATION MODE: No actual transactions will be executed
 ============================================================
-Wallet: ADDRESS_HERE
-Chain ID: 8453
-Balance: 0.003621 ETH
-AI Provider: OpenAI (GPT-4o)
-Safety Limits:
-   - Portfolio: $10.0
-   - Max Position: $1.0
-   - Daily Loss Limit: $2.0
-   - Min Confidence: 10%
+✨ Features:
+   • Trade simulation (records buy/sell prices)
+   • PnL calculation every 5 minutes
+   • Liquidity flow analysis (smart money tracking)
+   • Enhanced AI prompting (better context)
+   • Performance tracking (AI learns from results)
+============================================================
 
-Running trading loop with enhanced AI...
+✅ AI Trading Bot V2 Initialized - SIMULATION MODE
+📍 Wallet: 0x0000000000000000000000000000000000000000
+⛓️  Chain ID: 137 (Polygon/Matic)
+⚠️  SIMULATION MODE: No actual transactions will be executed
+
+🚀 Starting AI Trading Bot V2 - SIMULATION MODE (interval: 60s)
+============================================================
+⚠️  SIMULATION MODE: No actual transactions will be executed
+============================================================
+
+📊 Cycle 1 - 2026-02-02 12:00:00
+============================================================
+📡 Fetching trade data...
+💧 Fetching liquidity events...
+
+🤖 Asking AI to analyze markets and decide actions...
+✨ AI generated 1 action(s)
+
+🤖 AI Action: BUY MARKET_SYMBOL
+   Confidence: 45%
+   Reasoning: Found opportunity based on [analysis]
+   💱 Simulating BUY trade
+   📊 Entry Price: $0.65
+   ✅ Position recorded (SIMULATED)
+
+📈 Portfolio Status:
+   Open Positions: 1/2
+   Daily PnL (Realized): $0.00
+   AI Success Rate: 0.0%
+
+============================================================
+📊 PnL Report - 2026-02-02 12:05:00
+============================================================
+Total Open Positions: 1
+Total Unrealized PnL: $0.15
+Daily PnL (Realized + Unrealized): $0.15
+...
 ```
 
 ## Risk Disclaimer
 
-This bot trades with real cryptocurrency on mainnet. Use at your own risk:
-- Cryptocurrency trading carries significant risk
-- Past performance does not guarantee future results
-- Start with small amounts to test the bot
-- Monitor the bot's performance regularly
-- Be aware of gas costs on Base chain
-- AI decisions may not always be profitable
+This bot operates in **simulation mode** - no actual transactions are executed:
+- All trades are simulated and tracked for analysis
+- No real cryptocurrency is traded
+- PnL calculations are based on recorded prices
+- Use this for testing and learning trading strategies
+- Results may differ from actual trading due to execution delays and slippage
 
 ## Technical Details
 
-- **Blockchain**: Base (Chain ID: 8453)
-- **DEX**: Uniswap V3
-- **Router**: SwapRouter02 (0x2626664c2603336E57B271c5C0b26F421741e481)
-- **Quote Contract**: QuoterV2 (0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a)
-- **RPC**: https://mainnet.base.org
+- **Blockchain**: Polygon (Matic) Network (Chain ID: 137)
+- **Market**: Polymarket Prediction Markets
+- **Data Source**: Bitquery GraphQL API
+- **Liquidity Events**: OrdersMatched events from Polymarket order book contract
+- **Order Book Contract**: `0xC5d563A36AE78145C45a50134d48A1215220f80a`
+- **Simulation Mode**: No Web3 transactions, all trades are recorded only
+
+## Data Structure
+
+### Trade Data
+- `symbol`: Market symbol
+- `recent_price`: Current odds (0-1 probability)
+- `asset_id`: Unique asset token ID
+- `volume`: Trading volume
+- `buy_volume` / `sell_volume`: Buy/sell pressure
+
+### Liquidity Events (OrdersMatched)
+- `takerAssetId`: Asset ID being traded
+- `takerOrderMaker`: Trader address
+- `takerAmountFilled`: Amount trader wants to buy
+- `makerAmountFilled`: Amount liquidity provider can provide
 
 ## License
 
