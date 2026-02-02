@@ -288,6 +288,14 @@ AVAILABLE DATA:
 TRADE DATA (raw JSON):
 {trade_data_json}
 
+IMPORTANT: In Polymarket trade data:
+- "recent_price" or "price" represents the ODDS/PROBABILITY (0-1 range) that the prediction will be true
+  * Example: price=0.75 means 75% probability the prediction is true
+  * Example: price=0.25 means 25% probability (75% probability it's false)
+- "asset_id" is the unique identifier for the asset token (e.g., YES token ID for a particular question)
+- Higher price/odds = higher market confidence the prediction will be true
+- Lower price/odds = lower market confidence (higher confidence it will be false)
+
 LIQUIDITY EVENTS (raw JSON):
 {liquidity_events_json}
 
@@ -349,8 +357,21 @@ YOUR TASK:
 Analyze ALL data and decide what actions to take. You have FULL CONTROL.
 - Review open positions - should any be closed, adjusted, or held?
 - Look for new opportunities - any trades to open?
+  * Use odds/probability (price) to assess market confidence
+  * Higher odds (e.g., 0.8) = market thinks prediction likely true
+  * Lower odds (e.g., 0.2) = market thinks prediction likely false
+  * Look for mispriced opportunities where your analysis differs from market odds
 - Consider market making - any liquidity opportunities?
 - Consider risk - any stop losses or targets to adjust?
+
+DECISION MAKING WITH ODDS:
+- When price/odds is HIGH (e.g., >0.7): Market is confident prediction will be true
+  * Consider BUY if you agree, or look for contrarian opportunities if you disagree
+- When price/odds is LOW (e.g., <0.3): Market is confident prediction will be false
+  * Consider contrarian positions if you see value
+- When price/odds is MID (e.g., 0.4-0.6): Market is uncertain
+  * May present opportunities if you have strong conviction
+- Use asset_id to track specific prediction tokens (e.g., YES tokens for specific questions)
 
 Return an array of actions. Each action must have: action, market, confidence, reasoning.
 For CLOSE/HOLD/ADJUST actions, only need: action, market, confidence, reasoning.

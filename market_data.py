@@ -111,18 +111,28 @@ def process_trades(trades: List[Dict], required_tokens: List[Dict] = None) -> Di
             volume = float(volume_str) if volume_str else 0
             side = trade['Trade']['Side']['Type']
             contract = token.get('SmartContract', '')
+            
+            # Extract asset ID (e.g., YES token ID for a particular question)
+            asset_ids = trade['Trade'].get('Ids', [])
+            asset_id = asset_ids[0] if asset_ids and len(asset_ids) > 0 else None
 
             if volume == 0 or price == 0 or not symbol:
                 continue
 
             market_map[symbol]['trades'].append({
                 'time': trade['Block']['Time'],
-                'price': price,
+                'price': price,  # This represents the odds/probability (0-1 range)
+                'odds': price,  # Explicitly label as odds
                 'volume': volume,
-                'side': side
+                'side': side,
+                'asset_id': asset_id  # Asset token ID (e.g., YES token ID)
             })
             market_map[symbol]['total_volume'] += volume
             market_map[symbol]['contract_address'] = contract
+            
+            # Store asset ID for the market (use the most recent one)
+            if asset_id:
+                market_map[symbol]['asset_id'] = asset_id
 
             if side == 'buy':
                 market_map[symbol]['buy_volume'] += volume
@@ -141,7 +151,9 @@ def process_trades(trades: List[Dict], required_tokens: List[Dict] = None) -> Di
             'sell_volume': data['sell_volume'],
             'trade_count': len(data['trades']),
             'recent_price': data['trades'][-1]['price'] if data['trades'] else 0,
-            'contract_address': data.get('contract_address', '')
+            'recent_odds': data['trades'][-1]['price'] if data['trades'] else 0,  # PriceInUSD = odds (0-1)
+            'contract_address': data.get('contract_address', ''),
+            'asset_id': data.get('asset_id', None)  # Asset token ID (e.g., YES token ID for prediction)
         }
         for symbol, data in market_map.items()
     ]
