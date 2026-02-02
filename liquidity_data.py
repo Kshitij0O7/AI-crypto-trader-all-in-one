@@ -30,6 +30,7 @@ def fetch_liquidity_events(limit: int = 200) -> List[Dict]:
         Events(
           orderBy: { descending: Block_Time }
           where: {
+            Block: {Date: {after_relative: {days_ago: 1}}}
             Log: { Signature: { Name: { in: ["OrdersMatched"] } } }
             LogHeader: {
               Address: { is: "0xC5d563A36AE78145C45a50134d48A1215220f80a" }
