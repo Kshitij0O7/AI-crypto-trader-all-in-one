@@ -488,13 +488,24 @@ OUTPUT FORMAT (JSON only, no markdown):
                         print(f"⚠️  Skipping invalid {action} action (missing price fields): {action_data.get('market', 'unknown')}")
                         continue
                     
-                    # Map symbol to contract_address
+                    # Map symbol to contract_address and asset_id
                     market_symbol = action_data['market'].upper()
                     contract_address = self._find_contract_address(market_symbol, trade_data, liquidity_events)
                     
+                    # Extract asset_id from trade_data
+                    asset_id = None
+                    markets = trade_data.get('top_markets', []) if trade_data else []
+                    for m in markets:
+                        if m.get('symbol', '').upper() == market_symbol:
+                            asset_id = m.get('asset_id')
+                            break
+                    
                     if contract_address:
                         action_data['contract_address'] = contract_address
-                    else:
+                    if asset_id:
+                        action_data['asset_id'] = asset_id
+                    
+                    if not contract_address:
                         print(f"⚠️  Could not map symbol {market_symbol} to contract address, skipping")
                         continue
                     
@@ -895,6 +906,15 @@ OUTPUT FORMAT (JSON only, no markdown):
             print(f"   📊 Entry Price: ${entry_price:.8f}")
             print(f"   📊 Current Market Price: ${current_price:.8f}")
 
+            # Extract asset_id from market_data
+            asset_id = None
+            trade_data = market_data.get('trade_data', {}) if market_data else {}
+            markets = trade_data.get('top_markets', []) if trade_data else []
+            for m in markets:
+                if m.get('symbol', '').upper() == action_data['market'].upper():
+                    asset_id = m.get('asset_id')
+                    break
+            
             # Record position (simulated)
             position_id = f"sim_{int(time.time())}_{action_data['market']}"
             position = {
@@ -910,6 +930,7 @@ OUTPUT FORMAT (JSON only, no markdown):
                 'amount_usd': position_size,
                 'token_out': action_data['market'],
                 'contract_address': action_data.get('contract_address', ''),
+                'asset_id': asset_id,  # Store asset ID for tracking
                 'simulated': True  # Mark as simulated
             }
 

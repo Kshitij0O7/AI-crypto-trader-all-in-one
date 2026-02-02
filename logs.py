@@ -79,7 +79,7 @@ def log_open_positions(open_positions: List[Dict], market_data: Optional[Dict] =
         wb = create_workbook_if_not_exists(filepath)
         
         headers = [
-            "Timestamp", "Position ID", "Market", "Action", "Entry Price", 
+            "Timestamp", "Position ID", "Market", "Asset ID", "Action", "Entry Price", 
             "Current Price", "Target Price", "Stop Loss", "Amount USD",
             "PnL USD", "PnL %", "Confidence", "Reasoning"
         ]
@@ -119,6 +119,7 @@ def log_open_positions(open_positions: List[Dict], market_data: Optional[Dict] =
                 timestamp,
                 position_id,
                 market,
+                position.get('asset_id', 'N/A'),  # Asset ID
                 position.get('action', 'N/A'),
                 entry_price,
                 current_price,
@@ -163,7 +164,7 @@ def log_closed_positions(closed_positions: List[Dict]) -> Optional[str]:
         wb = create_workbook_if_not_exists(filepath)
         
         headers = [
-            "Timestamp", "Position ID", "Market", "Action", "Entry Price",
+            "Timestamp", "Position ID", "Market", "Asset ID", "Action", "Entry Price",
             "Exit Price", "Target Price", "Stop Loss", "Amount USD",
             "PnL USD", "PnL %", "Close Reason", "Confidence", "Reasoning"
         ]
@@ -188,6 +189,7 @@ def log_closed_positions(closed_positions: List[Dict]) -> Optional[str]:
                 timestamp,
                 position.get('id', position.get('market', 'N/A')),
                 position.get('market', position.get('token_out', 'N/A')),
+                position.get('asset_id', 'N/A'),  # Asset ID
                 position.get('action', 'N/A'),
                 position.get('entry_price', 0),
                 position.get('close_price', 0),
@@ -287,7 +289,7 @@ def log_signal_history(signal_history: List[Dict]) -> Optional[str]:
         wb = create_workbook_if_not_exists(filepath)
         
         headers = [
-            "Timestamp", "Signal", "Outcome", "Market", "Action", "Confidence"
+            "Timestamp", "Signal", "Outcome", "Market", "Asset ID", "Action", "Confidence"
         ]
         
         ws = ensure_sheet_exists(wb, "Signal History", headers)
@@ -310,16 +312,19 @@ def log_signal_history(signal_history: List[Dict]) -> Optional[str]:
                 market = signal_data.get('market', 'N/A')
                 action = signal_data.get('action', 'N/A')
                 confidence = signal_data.get('confidence', 0)
+                asset_id = signal_data.get('asset_id', 'N/A')  # Extract asset_id if available
             else:
                 market = 'N/A'
                 action = 'N/A'
                 confidence = 0
+                asset_id = 'N/A'
             
             row_data = [
                 timestamp,
                 str(signal_data)[:100],  # Truncate signal data
                 signal.get('outcome', 'pending'),
                 market,
+                asset_id,  # Asset ID
                 action,
                 confidence
             ]
