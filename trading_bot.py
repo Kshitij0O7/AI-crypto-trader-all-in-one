@@ -296,8 +296,16 @@ IMPORTANT: In Polymarket trade data:
 - Higher price/odds = higher market confidence the prediction will be true
 - Lower price/odds = lower market confidence (higher confidence it will be false)
 
-LIQUIDITY EVENTS (raw JSON):
+LIQUIDITY EVENTS - OrdersMatched (Polymarket Order Book):
 {liquidity_events_json}
+
+IMPORTANT: OrdersMatched events show liquidity provision activity:
+- "takerOrderMaker": Address of trader placing the order
+- "takerAssetId": Asset ID being traded (matches asset_id in trade data)
+- "takerAmountFilled": Amount of tokens trader wants to buy (order size)
+- "makerAmountFilled": Amount of tokens liquidity provider can provide
+- Higher makerAmountFilled = more liquidity available for that asset
+- Track which assets have active liquidity providers (smart money)
 
 OPEN POSITIONS (m=market,a=action,e=entry,t=target,s=stop,c=current,v=value_usd):
 {positions_json}
@@ -606,7 +614,7 @@ OUTPUT FORMAT (JSON only, no markdown):
         return 18
 
     def _find_contract_address(self, market_symbol: str, trade_data: Dict, liquidity_events: List) -> Optional[str]:
-        """Find contract address for a token symbol from trade data and liquidity events"""
+        """Find contract address for a token symbol from trade data"""
         contract_address = None
         
         # Try to find contract address from trade_data
@@ -616,17 +624,8 @@ OUTPUT FORMAT (JSON only, no markdown):
                 contract_address = m.get('contract_address', '')
                 break
         
-        # Also check liquidity_events for contract mapping
-        if not contract_address:
-            for event in liquidity_events or []:
-                pool = event.get('PoolEvent', {}).get('Pool', {})
-                for currency_key in ['CurrencyA', 'CurrencyB']:
-                    currency = pool.get(currency_key, {})
-                    if currency.get('Symbol', '').upper() == market_symbol:
-                        contract_address = currency.get('SmartContract', '')
-                        break
-                if contract_address:
-                    break
+        # Note: liquidity_events now contains OrdersMatched events with asset IDs, not contract addresses
+        # Contract addresses are found from trade_data only
         
         return contract_address
 

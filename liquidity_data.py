@@ -10,52 +10,61 @@ from typing import Dict, List, Optional
 BITQUERY_API_KEY = os.getenv('BITQUERY_API_KEY')
 
 
-def fetch_liquidity_events(limit: int = 100) -> Dict:
+def fetch_liquidity_events(limit: int = 200) -> List[Dict]:
     """
-    Fetch liquidity add/remove events from Polygon network
-    This shows smart money movements - much more valuable than just trades!
+    Fetch OrdersMatched events from Polymarket order book
+    This shows liquidity provision activity - when orders are matched on the order book
+    
+    Returns:
+        List of processed order match events with:
+        - takerOrderMaker: Trader address placing the order
+        - takerAssetId: Asset ID being traded
+        - takerAmountFilled: Amount of tokens trader wants to buy
+        - makerAmountFilled: Amount of tokens liquidity provider can provide
     """
     url = "https://streaming.bitquery.io/graphql"
 
     query = """
-    query PolygonLiquidityEvents {
-        EVM(network: matic) {
-            DEXPoolEvents(
-                limit: {count: 200}
-                orderBy: {descending: Block_Time}
-            ) {
-                Block {
-                    Time
-                    Number
-                }
-                PoolEvent {
-                    AtoBPrice
-                    BtoAPrice
-                    Liquidity {
-                        AmountCurrencyA
-                        AmountCurrencyB
-                    }
-                    Pool {
-                        CurrencyA {
-                            Symbol
-                            SmartContract
-                        }
-                        CurrencyB {
-                            Symbol
-                            SmartContract
-                        }
-                        PoolId
-                        SmartContract
-                    }
-                    Dex {
-                        ProtocolName
-                    }
-                }
-                Transaction {
-                    Hash
-                }
+    query PolymarketOrdersMatched {
+      EVM(dataset: realtime, network: matic) {
+        Events(
+          orderBy: { descending: Block_Time }
+          where: {
+            Log: { Signature: { Name: { in: ["OrdersMatched"] } } }
+            LogHeader: {
+              Address: { is: "0xC5d563A36AE78145C45a50134d48A1215220f80a" }
             }
+          }
+          limit: { count: 200 }
+        ) {
+          Block {
+            Time
+          }
+          Arguments {
+            Name
+            Value {
+              ... on EVM_ABI_Integer_Value_Arg {
+                integer
+              }
+              ... on EVM_ABI_Address_Value_Arg {
+                address
+              }
+              ... on EVM_ABI_String_Value_Arg {
+                string
+              }
+              ... on EVM_ABI_BigInt_Value_Arg {
+                bigInteger
+              }
+              ... on EVM_ABI_Bytes_Value_Arg {
+                hex
+              }
+              ... on EVM_ABI_Boolean_Value_Arg {
+                bool
+              }
+            }
+          }
         }
+      }
     }
     """
 
@@ -63,8 +72,7 @@ def fetch_liquidity_events(limit: int = 100) -> Dict:
         response = requests.post(
             url,
             json={
-                'query': query,
-                'variables': {'limit': limit}
+                'query': query
             },
             headers={
                 'Content-Type': 'application/json',
@@ -81,24 +89,67 @@ def fetch_liquidity_events(limit: int = 100) -> Dict:
 
         # Check for API errors
         if 'errors' in data:
-            print(f"⚠️  Liquidity API not available: {data['errors'][0].get('message', 'Unknown error')}")
+            print(f"⚠️  OrdersMatched API not available: {data['errors'][0].get('message', 'Unknown error')}")
             return None
 
         if not data.get('data'):
-            print("⚠️  No liquidity data returned (feature may require different API endpoint)")
+            print("⚠️  No liquidity data returned")
             return None
 
-        events = data.get('data', {}).get('EVM', {}).get('DEXPoolEvents', [])
+        events = data.get('data', {}).get('EVM', {}).get('Events', [])
 
         if not events:
-            print("⚠️  No liquidity events returned")
+            print("⚠️  No OrdersMatched events returned")
             return None
 
-        # Return raw events - let AI decide what to do with them
-        return events
+        # Process events to extract relevant fields from Arguments
+        processed_events = []
+        for event in events:
+            try:
+                # Extract arguments into a dictionary
+                args = {}
+                for arg in event.get('Arguments', []):
+                    arg_name = arg.get('Name')
+                    arg_value = arg.get('Value', {})
+                    
+                    # Extract value based on type
+                    if 'bigInteger' in arg_value:
+                        args[arg_name] = arg_value['bigInteger']
+                    elif 'address' in arg_value:
+                        args[arg_name] = arg_value['address']
+                    elif 'integer' in arg_value:
+                        args[arg_name] = arg_value['integer']
+                    elif 'string' in arg_value:
+                        args[arg_name] = arg_value['string']
+                    elif 'hex' in arg_value:
+                        args[arg_name] = arg_value['hex']
+                    elif 'bool' in arg_value:
+                        args[arg_name] = arg_value['bool']
+                
+                # Build processed event
+                processed_event = {
+                    'timestamp': event.get('Block', {}).get('Time'),
+                    'takerOrderMaker': args.get('takerOrderMaker'),  # Trader address
+                    'takerAssetId': args.get('takerAssetId'),  # Asset ID
+                    'takerAmountFilled': args.get('takerAmountFilled'),  # Amount trader wants to buy
+                    'makerAmountFilled': args.get('makerAmountFilled'),  # Amount liquidity provider can provide
+                    'takerOrderHash': args.get('takerOrderHash'),  # Order hash for reference
+                    'makerAssetId': args.get('makerAssetId')  # Maker asset ID
+                }
+                
+                processed_events.append(processed_event)
+            except Exception as e:
+                # Skip events that can't be processed
+                continue
+
+        if not processed_events:
+            print("⚠️  No valid OrdersMatched events processed")
+            return None
+
+        return processed_events
 
     except Exception as e:
-        print(f"⚠️  Liquidity data not available: {e}")
+        print(f"⚠️  Error fetching OrdersMatched events: {e}")
         return None
 
 
