@@ -47,6 +47,7 @@ def fetch_polymarket_data(limit: int = 100, required_tokens: List[Dict] = None) 
                     SmartContract
                 }
                 }
+                Ids
                 Currency {
                 Symbol
                 SmartContract

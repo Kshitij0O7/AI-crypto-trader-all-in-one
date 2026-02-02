@@ -50,7 +50,7 @@ if __name__ == "__main__":
     print("   • PnL calculation every 5 minutes")
     print("   • AI-powered decisions (GPT-4o)")
     print("   • Liquidity flow tracking (smart money)")
-    print("   • Real slippage awareness (execution costs)")
+    print("   • Liquidity flow tracking (smart money)")
     print("   • Enhanced risk management")
     print("=" * 60)
 

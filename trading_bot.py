@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AI Trading Bot V2 - Enhanced with Liquidity Intelligence
-Uses liquidity flows and slippage data for smarter AI decisions
+Uses liquidity flows for smarter AI decisions
 APIs → Parse → Pass ALL to AI → Let AI Find Opportunities
 """
 
@@ -27,7 +27,6 @@ class AITradingBotV2:
     """
     Enhanced AI Trading Bot with:
     - Liquidity flow analysis (smart money tracking)
-    - Slippage awareness (real execution costs)
     - Better AI prompting (more context, better decisions)
     - Improved risk management
     """
@@ -48,7 +47,8 @@ class AITradingBotV2:
         # Enhanced trading parameters
         self.portfolio_size = float(os.getenv('PORTFOLIO_SIZE_USD', 10))
         self.max_position_size = float(os.getenv('MAX_POSITION_SIZE_USD', 1.5))
-        self.slippage_tolerance = float(os.getenv('SLIPPAGE_TOLERANCE', 1.0))
+        # Slippage tolerance not used in simulation mode
+        # self.slippage_tolerance = float(os.getenv('SLIPPAGE_TOLERANCE', 1.0))
         self.gas_limit = int(os.getenv('GAS_LIMIT', 300000))
         self.max_gas_price_gwei = int(os.getenv('MAX_GAS_PRICE_GWEI', 50))
         self.daily_loss_limit = float(os.getenv('DAILY_LOSS_LIMIT_USD', 3))
@@ -237,16 +237,14 @@ class AITradingBotV2:
         
         Key improvements:
         - Liquidity flow analysis (smart money tracking)
-        - Slippage awareness (execution quality)
         - Historical signal performance (learning)
         - Market regime detection (adapt strategy)
         - Fully AI-driven decision making
         """
         try:
-            # Extract raw data from new format - pass all 3 sources directly to AI
+            # Extract raw data from new format - pass trade data and liquidity events to AI
             trade_data = market_data.get('trade_data', {})
             liquidity_events = market_data.get('liquidity_events', [])
-            slippage_data = market_data.get('slippage_data', [])
 
             # Calculate recent AI performance
             recent_signals = self.signal_history[-10:] if self.signal_history else []
@@ -257,12 +255,10 @@ class AITradingBotV2:
             # We'll map symbol to contract_address from trade_data when executing trades
             trade_data_for_ai = self._remove_smartcontract_fields(trade_data) if trade_data else {}
             liquidity_events_for_ai = self._remove_smartcontract_fields(liquidity_events) if liquidity_events else []
-            slippage_data_for_ai = self._remove_smartcontract_fields(slippage_data) if slippage_data else []
 
             # Prepare data for AI - use ultra-compact format to minimize tokens
             trade_data_json = self._to_compact_format(trade_data_for_ai) if trade_data_for_ai else "{}"
             liquidity_events_json = self._to_compact_format(liquidity_events_for_ai) if liquidity_events_for_ai else "[]"
-            slippage_data_json = self._to_compact_format(slippage_data_for_ai) if slippage_data_for_ai else "[]"
             
             # Prepare minimal open positions info for AI (only essential fields)
             open_positions_info = []
@@ -294,9 +290,6 @@ TRADE DATA (raw JSON):
 
 LIQUIDITY EVENTS (raw JSON):
 {liquidity_events_json}
-
-SLIPPAGE DATA (raw JSON):
-{slippage_data_json}
 
 OPEN POSITIONS (m=market,a=action,e=entry,t=target,s=stop,c=current,v=value_usd):
 {positions_json}
@@ -468,7 +461,7 @@ OUTPUT FORMAT (JSON only, no markdown):
                     
                     # Map symbol to contract_address
                     market_symbol = action_data['market'].upper()
-                    contract_address = self._find_contract_address(market_symbol, trade_data, liquidity_events, slippage_data)
+                    contract_address = self._find_contract_address(market_symbol, trade_data, liquidity_events)
                     
                     if contract_address:
                         action_data['contract_address'] = contract_address
@@ -591,8 +584,8 @@ OUTPUT FORMAT (JSON only, no markdown):
             return 6
         return 18
 
-    def _find_contract_address(self, market_symbol: str, trade_data: Dict, liquidity_events: List, slippage_data: List) -> Optional[str]:
-        """Find contract address for a token symbol from various data sources"""
+    def _find_contract_address(self, market_symbol: str, trade_data: Dict, liquidity_events: List) -> Optional[str]:
+        """Find contract address for a token symbol from trade data and liquidity events"""
         contract_address = None
         
         # Try to find contract address from trade_data
@@ -602,22 +595,10 @@ OUTPUT FORMAT (JSON only, no markdown):
                 contract_address = m.get('contract_address', '')
                 break
         
-        # Also check liquidity_events and slippage_data for contract mapping
+        # Also check liquidity_events for contract mapping
         if not contract_address:
             for event in liquidity_events or []:
                 pool = event.get('PoolEvent', {}).get('Pool', {})
-                for currency_key in ['CurrencyA', 'CurrencyB']:
-                    currency = pool.get(currency_key, {})
-                    if currency.get('Symbol', '').upper() == market_symbol:
-                        contract_address = currency.get('SmartContract', '')
-                        break
-                if contract_address:
-                    break
-        
-        if not contract_address:
-            for slippage in slippage_data or []:
-                price_data = slippage.get('Price', {})
-                pool = price_data.get('Pool', {})
                 for currency_key in ['CurrencyA', 'CurrencyB']:
                     currency = pool.get(currency_key, {})
                     if currency.get('Symbol', '').upper() == market_symbol:
@@ -868,10 +849,6 @@ OUTPUT FORMAT (JSON only, no markdown):
 
     def _execute_trade(self, action_data: Dict, market_data: Dict, trade_type: str) -> Optional[str]:
         """Simulate a BUY or SELL trade - records position without executing blockchain transaction"""
-        # Show raw slippage data if available
-        if 'slippage_bps' in action_data:
-            print(f"   Slippage: {action_data['slippage_bps']} bps")
-
         print(f"   Entry: ${action_data['entry_price']:.8f}")
         print(f"   Target: ${action_data['target_price']:.8f}")
         print(f"   Stop Loss: ${action_data['stop_loss']:.8f}")
@@ -913,7 +890,6 @@ OUTPUT FORMAT (JSON only, no markdown):
                 'amount_usd': position_size,
                 'token_out': action_data['market'],
                 'contract_address': action_data.get('contract_address', ''),
-                'slippage_bps': action_data.get('slippage_bps', 0),
                 'simulated': True  # Mark as simulated
             }
 
@@ -1058,7 +1034,7 @@ if __name__ == "__main__":
     print("   • Trade simulation (records buy/sell prices)")
     print("   • PnL calculation every 5 minutes")
     print("   • Liquidity flow analysis (smart money tracking)")
-    print("   • Real slippage data (execution quality)")
+    print("   • Liquidity flow analysis (smart money tracking)")
     print("   • Enhanced AI prompting (better context)")
     print("   • Performance tracking (AI learns from results)")
     print("=" * 60)
