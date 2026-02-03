@@ -54,21 +54,23 @@ The bot operates in continuous cycles, performing the following steps:
 ## Requirements
 
 - Python 3.8+
-- BitQuery API key for market and liquidity data (create at https://account.bitquery.io/user/api_v2/access_tokens)
+- [BitQuery Access Token](https://account.bitquery.io/user/api_v2/access_tokens/?utm_source=github&utm_medium=readme&utm_campaign=polymarket_openAI_bot) for market and liquidity data
 - OpenAI API key or Anthropic API key
 - **No wallet or RPC required** (simulation mode)
+
+> 📚 **API Documentation**: For detailed information on Polymarket APIs, queries, and data structures, see the [Bitquery Polymarket API Documentation](https://docs.bitquery.io/docs/examples/polymarket-api/?utm_source=github&utm_medium=readme&utm_campaign=polymarket_openAI_bot)
 
 ## Installation
 
 1. Clone the repository
 ```bash
-git clone https://github.com/divyasshree-BQ/AI-crypto-trader-all-in-one
+git clone https://github.com/Kshitij0O7/AI-crypto-trader-all-in-one
 cd AI-crypto-trader-all-in-one
 ```
 
 2. Install dependencies
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 3. Get API Keys
@@ -92,11 +94,6 @@ MAX_POSITION_SIZE_USD=1.5
 DAILY_LOSS_LIMIT_USD=3
 MAX_OPEN_POSITIONS=2
 MIN_CONFIDENCE_THRESHOLD=30
-
-# Optional - Not required for simulation mode
-# RPC_URL=https://polygon-rpc.com
-# CHAIN_ID=137
-# PRIVATE_KEY=your_wallet_private_key_here
 ```
 
 ## Usage
@@ -243,10 +240,12 @@ This bot operates in **simulation mode** - no actual transactions are executed:
 
 - **Blockchain**: Polygon (Matic) Network (Chain ID: 137)
 - **Market**: Polymarket Prediction Markets
-- **Data Source**: Bitquery GraphQL API
+- **Data Source**: [Bitquery GraphQL API](https://docs.bitquery.io/docs/examples/polymarket-api/?utm_source=github&utm_medium=readme&utm_campaign=polymarket_openAI_bot)
 - **Liquidity Events**: OrdersMatched events from Polymarket order book contract
-- **Order Book Contract**: `0xC5d563A36AE78145C45a50134d48A1215220f80a`
+- **Order Book Contract**: `0xC5d563A36AE78145C45a50134d48A1215220f80a` (CTF Exchange)
 - **Simulation Mode**: No Web3 transactions, all trades are recorded only
+
+For detailed information on Polymarket contract addresses, events, and query examples, see the [Bitquery Polymarket API Documentation](https://docs.bitquery.io/docs/examples/polymarket-api/?utm_source=github&utm_medium=readme&utm_campaign=polymarket_openAI_bot).
 
 ## Data Structure
 
@@ -270,6 +269,17 @@ MIT License
 ## Contributing
 
 Contributions welcome. Please test thoroughly before submitting pull requests.
+
+## Additional Resources
+
+- **[Bitquery Polymarket API Documentation](https://docs.bitquery.io/docs/examples/polymarket-api/?utm_source=github&utm_medium=readme&utm_campaign=polymarket_openAI_bot)**: Complete guide to Polymarket APIs, including:
+  - Getting market prices and trades
+  - Querying OrderFilled and OrdersMatched events
+  - Market lifecycle tracking
+  - Contract addresses and event structures
+  - Step-by-step query examples
+
+- **[Bitquery Access Tokens](https://account.bitquery.io/user/api_v2/access_tokens/?utm_source=github&utm_medium=readme&utm_campaign=polymarket_openAI_bot)**: Get your API key for accessing Bitquery GraphQL APIs
 
 ## Support
 
